@@ -24,6 +24,7 @@ use anyhow::{anyhow, bail, Result};
 use lexicon_cid::Cid;
 use serde_cbor::Value as CborValue;
 use std::mem;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug)]
 pub struct NodeIter {
@@ -360,12 +361,12 @@ pub struct MST {
     pub layer: Option<u32>,
     pub pointer: Cid,
     pub outdated_pointer: bool,
-    pub storage: SqlRepoReader,
+    pub storage: Arc<RwLock<SqlRepoReader>>,
 }
 
 impl MST {
     pub fn new(
-        storage: SqlRepoReader,
+        storage: Arc<RwLock<SqlRepoReader>>,
         pointer: Cid,
         entries: Option<Vec<NodeEntry>>,
         layer: Option<u32>,
@@ -380,7 +381,7 @@ impl MST {
     }
 
     pub fn create(
-        storage: SqlRepoReader,
+        storage: Arc<RwLock<SqlRepoReader>>,
         entries: Option<Vec<NodeEntry>>,
         layer: Option<u32>,
     ) -> Result<MST> {
@@ -389,7 +390,7 @@ impl MST {
         Ok(MST::new(storage, pointer, Some(entries), layer))
     }
 
-    pub fn from_data(storage: SqlRepoReader, data: NodeData, layer: Option<u32>) -> Result<MST> {
+    pub fn from_data(storage: Arc<RwLock<SqlRepoReader>>, data: NodeData, layer: Option<u32>) -> Result<MST> {
         let entries = util::deserialize_node_data(&storage, data.clone(), layer)?;
         let pointer = ipld::cid_for_cbor(&data)?;
         Ok(MST::new(storage, pointer, Some(entries), layer))
@@ -397,7 +398,7 @@ impl MST {
 
     /// This is poorly named in both implementations, because it is lazy
     /// this is really a *lazy* load, doesn't actually touch storage
-    pub fn load(storage: SqlRepoReader, cid: Cid, layer: Option<u32>) -> Result<MST> {
+    pub fn load(storage: Arc<RwLock<SqlRepoReader>>, cid: Cid, layer: Option<u32>) -> Result<MST> {
         Ok(MST::new(storage, cid, None, layer))
     }
 
@@ -426,7 +427,7 @@ impl MST {
         };
         // otherwise this is a virtual/pointer struct, and we need to hydrate from
         // block store before returning entries
-        let data: CborValue = self.storage.read_obj(&self.pointer, |obj: &CborValue| {
+        let data: CborValue = self.storage.read().unwrap().read_obj(&self.pointer, |obj: &CborValue| {
             match serde_cbor::value::from_value::<NodeData>(obj.clone()) {
                 Ok(_) => true,
                 Err(_) => false,
@@ -530,7 +531,7 @@ impl MST {
     pub fn get_unstored_blocks(&mut self) -> Result<UnstoredBlocks> {
         let mut blocks = BlockMap::new();
         let pointer = self.get_pointer()?;
-        let already_has = self.storage.has(pointer)?;
+        let already_has = self.storage.write().unwrap().has(pointer)?;
         if already_has {
             return Ok(UnstoredBlocks {
                 root: pointer,
@@ -1176,7 +1177,7 @@ impl MST {
         to_fetch.add(self.get_pointer()?);
         while to_fetch.size() > 0 {
             let mut next_layer = CidSet::new(None);
-            let fetched = self.storage.get_blocks(to_fetch.to_list()).await?;
+            let fetched = self.storage.write().unwrap().get_blocks(to_fetch.to_list()).await?;
             if fetched.missing.len() > 0 {
                 return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
                     "mst node".to_owned(),
@@ -1196,7 +1197,7 @@ impl MST {
                     bytes: found.bytes,
                 });
                 let node_data: NodeData = serde_cbor::value::from_value(found.obj)?;
-                let entries = util::deserialize_node_data(&self.storage, node_data.clone(), None)?;
+                let entries = util::deserialize_node_data(self.storage.clone(), node_data.clone(), None)?;
 
                 for entry in entries {
                     match entry {
@@ -1207,7 +1208,7 @@ impl MST {
             }
             to_fetch = next_layer;
         }
-        let leaf_data = self.storage.get_blocks(leaves.to_list()).await?;
+        let leaf_data = self.storage.write().unwrap().get_blocks(leaves.to_list()).await?;
         if leaf_data.missing.len() > 0 {
             return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
                 "mst leaf".to_owned(),
@@ -1285,7 +1286,7 @@ mod tests {
     #[test]
     fn adds_records() -> Result<()> {
         let mut storage =
-            SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+            Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mapping = generate_bulk_data_keys(254, Some(&mut storage))?;
         let mut mst = MST::create(storage, None, None)?;
         let mut rng = thread_rng();
@@ -1315,7 +1316,7 @@ mod tests {
     #[test]
     fn edits_records() -> Result<()> {
         let mut storage =
-            SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mapping = generate_bulk_data_keys(100, Some(&mut storage))?;
         let mut mst = MST::create(storage, None, None)?;
         let mut rng = thread_rng();
@@ -1349,7 +1350,7 @@ mod tests {
     #[test]
     fn deletes_records() -> Result<()> {
         let mut storage =
-            SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mapping = generate_bulk_data_keys(254, Some(&mut storage))?;
         let mut mst = MST::create(storage, None, None)?;
         let mut rng = thread_rng();
@@ -1390,7 +1391,7 @@ mod tests {
     #[test]
     fn is_order_independent() -> Result<()> {
         let mut storage =
-            SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mapping = generate_bulk_data_keys(254, Some(&mut storage))?;
         let mut mst = MST::create(storage, None, None)?;
         let mut rng = thread_rng();
@@ -1427,12 +1428,12 @@ mod tests {
     #[test]
     fn saves_and_loads_from_blockstore() -> Result<()> {
         let mut storage =
-            SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mapping = generate_bulk_data_keys(50, Some(&mut storage))?;
         let mut mst = MST::create(storage, None, None)?;
 
         let mst_storage = mst.storage.clone();
-        let root = futures::executor::block_on(save_mst(&mst_storage, &mut mst))?;
+        let root = futures::executor::block_on(save_mst(mst_storage.clone(), &mut mst))?;
         let loaded = MST::load(mst_storage, root, None)?;
         let original_nodes = mst.all_nodes()?;
         let loaded_nodes = loaded.all_nodes()?;
@@ -1543,7 +1544,7 @@ mod tests {
         let cid1str = "bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454";
         let cid1 = Cid::try_from(cid1str)?;
 
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
         // Rejects empty key
         let result = mst.add(&"".to_string(), cid1, None);
@@ -1612,7 +1613,7 @@ mod tests {
     /// computes "empty" tree root CID
     #[test]
     fn empty_tree_root() -> Result<()> {
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         assert_eq!(mst.clone().leaf_count()?, 0);
@@ -1628,7 +1629,7 @@ mod tests {
     #[test]
     fn trivial_tree() -> Result<()> {
         let cid1 = Cid::try_from("bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454")?; //dag-pb
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         mst = mst.add(&"com.example.record/3jqfcqzm3fo2j".to_string(), cid1, None)?;
@@ -1645,7 +1646,7 @@ mod tests {
     #[test]
     fn singlelayer2_tree() -> Result<()> {
         let cid1 = Cid::try_from("bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454")?; //dag-pb
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         mst = mst.add(&"com.example.record/3jqfcqzm3fx2j".to_string(), cid1, None)?;
@@ -1663,7 +1664,7 @@ mod tests {
     #[test]
     fn simple_tree() -> Result<()> {
         let cid1 = Cid::try_from("bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454")?;
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         let mut mst = mst.add(&"com.example.record/3jqfcqzm3fp2j".to_string(), cid1, None)?; // level 0
@@ -1686,7 +1687,7 @@ mod tests {
     #[test]
     fn trim_on_delete() -> Result<()> {
         let cid1 = Cid::try_from("bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454")?;
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         let l1root = "bafyreifnqrwbk6ffmyaz5qtujqrzf5qmxf7cbxvgzktl4e3gabuxbtatv4";
@@ -1727,7 +1728,7 @@ mod tests {
     #[test]
     fn handle_insertion_that_splits_two_layers_down() -> Result<()> {
         let cid1 = Cid::try_from("bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454")?;
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         let l1root = "bafyreiettyludka6fpgp33stwxfuwhkzlur6chs4d2v4nkmq2j3ogpdjem";
@@ -1780,7 +1781,7 @@ mod tests {
     #[test]
     fn handle_new_layers_that_are_two_higher_than_existing() -> Result<()> {
         let cid1 = Cid::try_from("bafyreie5cvv4h45feadgeuwhbcutmh6t2ceseocckahdoe6uat64zmz454")?;
-        let storage = SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None);
+        let storage = Arc::new(RwLock::new(SqlRepoReader::new(None, "did:example:123456789abcdefghi".to_string(), None)));
         let mut mst = MST::create(storage, None, None)?;
 
         let l0root = "bafyreidfcktqnfmykz2ps3dbul35pepleq7kvv526g47xahuz3rqtptmky";

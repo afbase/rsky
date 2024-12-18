@@ -13,6 +13,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::str;
+use std::sync::{Arc, RwLock};
 
 fn is_valid_chars(input: &str) -> bool {
     lazy_static! {
@@ -106,7 +107,7 @@ pub fn serialize_node_data(entries: Vec<NodeEntry>) -> Result<NodeData> {
 }
 
 pub fn deserialize_node_data(
-    storage: &SqlRepoReader,
+    storage: Arc<RwLock<SqlRepoReader>>,
     data: NodeData,
     layer: Option<u32>,
 ) -> Result<Vec<NodeEntry>> {
@@ -197,7 +198,7 @@ pub fn random_cid(storage: &mut Option<&mut SqlRepoReader>) -> Result<Cid> {
 
 pub fn generate_bulk_data_keys(
     count: usize,
-    mut blockstore: Option<&mut SqlRepoReader>,
+    mut blockstore: Option<&mut Arc<RwLock<SqlRepoReader>>>,
 ) -> Result<IdMapping> {
     let mut obj: IdMapping = BTreeMap::new();
     for _ in 0..count {
@@ -224,10 +225,10 @@ pub fn random_str(len: usize) -> String {
     result
 }
 
-pub async fn save_mst(storage: &SqlRepoReader, mst: &mut MST) -> Result<Cid> {
+pub async fn save_mst(storage: Arc<RwLock<SqlRepoReader>>, mst: &mut MST) -> Result<Cid> {
     let diff = mst.get_unstored_blocks()?;
     storage
-        .put_many(diff.blocks, Ticker::new().next(None).to_string())
+        .write().unwrap().put_many(diff.blocks, Ticker::new().next(None).to_string())
         .await?;
     Ok(diff.root)
 }

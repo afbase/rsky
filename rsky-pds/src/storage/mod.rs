@@ -23,6 +23,7 @@ use serde_cbor::Value as CborValue;
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -96,6 +97,24 @@ pub struct SqlRepoReader {
 pub enum RepoRootError {
     #[error("Repo root not found")]
     RepoRootNotFoundError,
+}
+
+
+
+// First implement Deref (required for DerefMut)
+impl Deref for SqlRepoReader {
+    type Target = BlockMap;  // Or whatever the appropriate target type is
+
+    fn deref(&self) -> &Self::Target {
+        &self.blocks  // Return reference to the main storage field
+    }
+}
+
+// Then implement DerefMut
+impl DerefMut for SqlRepoReader {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.blocks  // Return mutable reference to the main storage field
+    }
 }
 
 // Basically handles getting ipld blocks from db

@@ -40,8 +40,8 @@ async fn inner_activate_account(
             requester.clone(),
             S3BlobStore::new(requester.clone(), s3_config),
         );
-        let root = actor_store.storage.get_root_detailed().await?;
-        let blocks = actor_store.storage.get_blocks(vec![root.cid]).await?;
+        let root = actor_store.storage.read().unwrap().get_root_detailed().await?;
+        let blocks = actor_store.storage.write().unwrap().get_blocks(vec![root.cid]).await?;
         let commit_data = CommitData {
             cid: root.cid,
             rev: root.rev,

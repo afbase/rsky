@@ -39,6 +39,7 @@ use serde_json::{json, Value as JsonValue};
 use std::collections::BTreeMap;
 use std::env;
 use std::str::FromStr;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct FoundBlobRef {
@@ -80,7 +81,7 @@ pub struct CommitRecord {
 
 #[derive(Debug)]
 pub struct Repo {
-    storage: SqlRepoReader, // get ipld blocks from db
+    storage: Arc<RwLock<SqlRepoReader>>, // get ipld blocks from db
     data: MST,
     commit: Commit,
     cid: Cid,
@@ -88,7 +89,7 @@ pub struct Repo {
 
 pub struct ActorStore {
     pub did: String,
-    pub storage: SqlRepoReader, // get ipld blocks from db
+    pub storage: Arc<RwLock<SqlRepoReader>>, // get ipld blocks from db
     pub record: RecordReader,   // get lexicon records from db
     pub blob: BlobReader,       // get blobs
     pub pref: PreferenceReader, // get preferences
@@ -99,7 +100,7 @@ impl ActorStore {
     /// Concrete reader of an individual repo (hence S3BlobStore which takes `did` param)
     pub fn new(did: String, blobstore: S3BlobStore) -> Self {
         ActorStore {
-            storage: SqlRepoReader::new(None, did.clone(), None),
+            storage: Arc::new(RwLock::new(SqlRepoReader::new(None, did.clone(), None))),
             record: RecordReader::new(did.clone()),
             pref: PreferenceReader::new(did.clone()),
             did,
@@ -139,7 +140,7 @@ impl ActorStore {
             keypair,
             Some(write_ops),
         )?;
-        self.storage.apply_commit(commit.clone(), None).await?;
+        self.storage.write().unwrap().apply_commit(commit.clone(), None).await?;
         let writes = writes
             .into_iter()
             .map(|w| PreparedWrite::Create(w))
@@ -163,7 +164,7 @@ impl ActorStore {
         }
         try_join!(
             // persist the commit to repo storage
-            self.storage.apply_commit(commit.clone(), None),
+            self.storage.write().unwrap().apply_commit(commit.clone(), None),
             // process blobs
             self.blob.process_write_blobs(writes)
         )?;
@@ -368,7 +369,7 @@ impl Repo {
     }
 
     // static
-    pub async fn load(storage: &mut SqlRepoReader, cid: Option<Cid>) -> Result<Self> {
+    pub async fn load(storage: &mut Arc<RwLock<SqlRepoReader>>, cid: Option<Cid>) -> Result<Self> {
         let commit_cid = if let Some(cid) = cid {
             Some(cid)
         } else {
@@ -447,7 +448,7 @@ impl Repo {
                     },
                     _ => return Err(anyhow!("Invalid Ipld format for Commit")),
                 };
-                let data = MST::load(storage.clone(), commit.data, None)?;
+                let data = MST::load(storage, commit.data, None)?;
                 Ok(Repo::new(storage.clone(), data, commit, commit_cid))
             }
             None => bail!("No cid provided and none in storage"),
@@ -519,7 +520,7 @@ impl Repo {
 
     // static
     pub fn format_init_commit(
-        storage: SqlRepoReader,
+        storage: Arc<RwLock<SqlRepoReader>>,
         did: String,
         keypair: Keypair,
         initial_writes: Option<Vec<RecordCreateOrUpdateOp>>,
@@ -652,7 +653,7 @@ impl Repo {
 
     pub async fn apply_commit(&mut self, commit_data: CommitData) -> Result<Self> {
         let commit_data_cid = commit_data.cid.clone();
-        self.storage.apply_commit(commit_data, None).await?;
+        self.storage.write().unwrap().apply_commit(commit_data, None).await?;
         Repo::load(&mut self.storage, Some(commit_data_cid)).await
     }
 

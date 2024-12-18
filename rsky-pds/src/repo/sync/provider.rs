@@ -6,17 +6,18 @@ use crate::repo::mst::MST;
 use crate::repo::types::{Commit, RecordPath};
 use crate::repo::util;
 use crate::storage::SqlRepoReader;
+use std::sync::{Arc, RwLock};
 use anyhow::Result;
 use lexicon_cid::Cid;
 use serde_cbor::Value as CborValue;
 
 pub async fn get_records(
-    storage: &mut SqlRepoReader,
+    storage: Arc<RwLock<SqlRepoReader>>,
     commit_cid: Cid,
     paths: Vec<RecordPath>,
 ) -> Result<Vec<u8>> {
     let mut car = BlockMap::new();
-    let commit = storage.read_obj_and_bytes(&commit_cid, |obj: &CborValue| {
+    let commit = storage.read().unwrap().read_obj_and_bytes(&commit_cid, |obj: &CborValue| {
         match serde_cbor::value::from_value::<Commit>(obj.clone()) {
             Ok(_) => true,
             Err(_) => false,
@@ -36,7 +37,7 @@ pub async fn get_records(
                 acc.add_set(CidSet::new(Some(cur)));
                 acc
             });
-    let found = storage.get_blocks(all_cids.to_list()).await?;
+    let found = storage.write().unwrap().get_blocks(all_cids.to_list()).await?;
     if found.missing.len() > 0 {
         return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
             "writeRecordsToCarStream".to_owned(),
