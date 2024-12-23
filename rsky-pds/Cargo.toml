@@ -77,3 +77,10 @@ lexicon_cid = { package = "cid", version = "0.10.1", features = ["serde-codec"] 
 [dependencies.rocket_sync_db_pools]
 version = "=0.1.0"
 features = ["diesel_postgres_pool"]
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "mst"
+harness = false
