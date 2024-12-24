@@ -1,5 +1,7 @@
 ## Notes
 
+If you want to see the version of the code I ran for these benchmark results on my machine, simply `git checkout 6623440` or `git checkout a7fc365`.
+
 1. [a7fc365](https://github.com/afbase/rsky/tree/a7fc365) - the first version of the mst benchmark; it times out on @afbase's computer. If i had added something like `group.measurement_time(Duration::from_secs(1500));`, it likely would have been okay.
 1. [6623440](https://github.com/afbase/rsky/tree/6623440) - the second version of the mst benchmark; it does not time out on @afbase's computer.  @afbase also thought of two metrics that might be useful to look at on the MST: (i) originally 
 ```math
