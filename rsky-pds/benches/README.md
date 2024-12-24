@@ -1,3 +1,14 @@
+## Notes
+
+1. [a7fc365](https://github.com/afbase/rsky/tree/a7fc365) - the first version of the mst benchmark; it times out on @afbase's computer. If i had added something like `group.measurement_time(Duration::from_secs(1500));`, it likely would have been okay.
+1. [6623440](https://github.com/afbase/rsky/tree/6623440) - the second version of the mst benchmark; it does not time out on @afbase's computer.  @afbase also thought of two metrics that might be useful to look at on the MST: (i) originally `$d(x,y) = \sqrt{\left(h_b\left(x\right)-h_b\left(y\right)^2 + \left(e\left(x, y\right)^2 \right)^2}$` and (ii) more meaninful to tree depth `$\delta(x,y) = \sqrt{\left(h_b\left(x\right)-h_b\left(y\right)^2 \right)^2}$` where x and y are any two possible keys in the key space and `$h_b(x)$` is the number of leading zeros in the SHA-256 hash of x.  `$e(x,y)$` is the edit distance between x and y.  I use `$\delta$` as a metric in the second test (see output below) where it does give some idea in the max depth of the MST from the sample of keys and values, alongside some distribution of the hashes in the sample.  I think there is some correlation to MST tree depth and runtime. 
+
+
+### Criterion Reports
+
+[Criterion](http://bheisler.github.io/criterion.rs/criterion/) outputs the benchmark reports in target by default.  I placed copy of the reports from my benchmark runs.  
+
+## Output of the second test
 Benchmarking mst_operations/add_records/100: Collecting 20 samples in estimated 1525.3 s (12k iterations)
 sample size,mean,standard deviation,max MST depth (i.e. max zeros in a key)
 100,0.58,0.88,5.00
