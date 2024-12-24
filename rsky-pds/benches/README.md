@@ -1,7 +1,15 @@
 ## Notes
 
 1. [a7fc365](https://github.com/afbase/rsky/tree/a7fc365) - the first version of the mst benchmark; it times out on @afbase's computer. If i had added something like `group.measurement_time(Duration::from_secs(1500));`, it likely would have been okay.
-1. [6623440](https://github.com/afbase/rsky/tree/6623440) - the second version of the mst benchmark; it does not time out on @afbase's computer.  @afbase also thought of two metrics that might be useful to look at on the MST: (i) originally `$d(x,y) = \sqrt{\left(h_b\left(x\right)-h_b\left(y\right)^2 + \left(e\left(x, y\right)^2 \right)^2}$` and (ii) more meaninful to tree depth `$\delta(x,y) = \sqrt{\left(h_b\left(x\right)-h_b\left(y\right)^2 \right)^2}$` where x and y are any two possible keys in the key space and `$h_b(x)$` is the number of leading zeros in the SHA-256 hash of x.  `$e(x,y)$` is the edit distance between x and y.  I use `$\delta$` as a metric in the second test (see output below) where it does give some idea in the max depth of the MST from the sample of keys and values, alongside some distribution of the hashes in the sample.  I think there is some correlation to MST tree depth and runtime. 
+1. [6623440](https://github.com/afbase/rsky/tree/6623440) - the second version of the mst benchmark; it does not time out on @afbase's computer.  @afbase also thought of two metrics that might be useful to look at on the MST: (i) originally 
+```math
+d(x,y) = \sqrt{\left(h_b\left(x\right)-h_b\left(y\right)^2 + \left(e\left(x, y\right)^2 \right)^2}
+```
+and (ii) more meaninful to tree depth 
+```math
+\delta(x,y) = \sqrt{\left(h_b\left(x\right)-h_b\left(y\right)^2 \right)^2}
+```
+where x and y are any two possible keys in the key space and $h_b(x)$ is the number of leading zeros in the SHA-256 hash of x.  $e(x,y)$ is the edit distance between x and y.  I use $\delta$ as a metric in the second test (see output below) where it does give some idea in the max depth of the MST from the sample of keys and values, alongside some distribution of the hashes in the sample.  I think there is some correlation to MST tree depth and runtime. 
 
 
 ### Criterion Reports
