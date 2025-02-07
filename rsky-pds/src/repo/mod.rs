@@ -30,6 +30,7 @@ use diesel::*;
 use futures::stream::{self, StreamExt};
 use lazy_static::lazy_static;
 use lexicon_cid::Cid;
+use rocket::http::ext::IntoCollection;
 use rsky_syntax::aturi::AtUri;
 use secp256k1::{Keypair, Secp256k1, SecretKey};
 use serde::Serialize;
@@ -381,6 +382,38 @@ impl ActorStore {
             .into_iter()
             .map(|row| Cid::from_str(&row).map_err(|error| anyhow::Error::new(error)))
             .collect::<Result<Vec<Cid>>>()?)
+    }
+
+    pub async fn insert_blobs(record_uri: AtUri, blobs: Vec<BlobRef>) {
+        let records = blobs.iter().map(|v| {
+            // pub struct RecordBlob {
+            //     #[diesel(column_name = blobCid, sql_type = Text)]
+            //     #[serde(rename = "blobCid")]
+            //     pub blob_cid: String,
+            //     #[diesel(column_name = recordUri, sql_type = Text)]
+            //     #[serde(rename = "recordUri")]
+            //     pub record_uri: String,
+            //     #[diesel(sql_type = Text)]
+            //     pub did: String,
+            // }
+            RecordBlob {
+                blob_cid: v.get_cid(),
+                record_uri: record_uri.to_string(),
+                // @TODO might need to bring the
+                // let did = actor_store.did;
+                // with import_repo
+                did: String::default(), 
+            }
+        })
+        .collect::<Vec<RecordBlob>>();
+        // @TODO balance risk of a race in the case of a long retry
+        use crate::schema::pds::record_blob::dsl as RecordBlobSchema;
+        let conn = &mut establish_connection()?;
+        let res = insert_into(RecordBlobSchema::record_blob)
+        .values(records)
+        .on_conflict_do_nothing()
+        .execute(conn)?;
+        
     }
 }
 

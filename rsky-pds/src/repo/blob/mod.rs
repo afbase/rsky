@@ -205,6 +205,7 @@ impl BlobReader {
             .bind::<Nullable<Text>, _>(None as Option<String>)
             .execute(conn)?;
 
+        // TODO: Consider rsky_lexicon BlobRef????
         Ok(BlobRef::new(cid, mime_type, size, None))
     }
 
