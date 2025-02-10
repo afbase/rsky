@@ -13,6 +13,7 @@ use secp256k1::Keypair;
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::convert::{From, TryFrom};
 use std::fmt::Display;
 use std::str::FromStr;
 use tokio::try_join;
@@ -47,65 +48,100 @@ pub fn format_data_key<T: FromStr + Display>(collection: T, rkey: T) -> String {
     format!("{collection}/{rkey}")
 }
 
-pub fn lex_to_ipld(val: Lex) -> Ipld {
-    match val {
-        Lex::List(list) => Ipld::List(
-            list.into_iter()
-                .map(|item| lex_to_ipld(item))
-                .collect::<Vec<Ipld>>(),
-        ),
-        Lex::Map(map) => {
-            let mut to_return: BTreeMap<String, Ipld> = BTreeMap::new();
-            for key in map.keys() {
-                to_return.insert(key.to_owned(), lex_to_ipld(map.get(key).unwrap().clone()));
+// Implement From<Lex> for Ipld
+impl From<Lex> for Ipld {
+    fn from(val: Lex) -> Self {
+        match val {
+            Lex::List(list) => Ipld::List(
+                list.into_iter()
+                    .map(Ipld::from)
+                    .collect::<Vec<Ipld>>(),
+            ),
+            Lex::Map(map) => {
+                let mut to_return: BTreeMap<String, Ipld> = BTreeMap::new();
+                for (key, value) in map {
+                    to_return.insert(key, Ipld::from(value));
+                }
+                Ipld::Map(to_return)
             }
-            Ipld::Map(to_return)
-        }
-        Lex::Blob(blob) => {
-            Ipld::Json(serde_json::to_value(blob.original).expect("Issue serializing blob"))
-        }
-        Lex::Ipld(ipld) => match ipld {
-            Ipld::Json(json_val) => match serde_json::from_value::<Cid>(json_val.clone()) {
-                Ok(cid) => Ipld::Link(cid),
-                Err(_) => Ipld::Json(json_val),
+            Lex::Blob(blob) => {
+                Ipld::Json(serde_json::to_value(blob.original).expect("Issue serializing blob"))
+            }
+            Lex::Ipld(ipld) => match ipld {
+                Ipld::Json(json_val) => match serde_json::from_value::<Cid>(json_val.clone()) {
+                    Ok(cid) => Ipld::Link(cid),
+                    Err(_) => Ipld::Json(json_val),
+                },
+                _ => ipld,
             },
-            _ => ipld,
-        },
+        }
     }
 }
 
-pub fn ipld_to_lex(val: Ipld) -> Lex {
-    match val {
-        Ipld::List(list) => Lex::List(
-            list.into_iter()
-                .map(|item| ipld_to_lex(item))
-                .collect::<Vec<Lex>>(),
-        ),
-        Ipld::Map(map) => {
-            let mut to_return: BTreeMap<String, Lex> = BTreeMap::new();
-            for key in map.keys() {
-                to_return.insert(key.to_owned(), ipld_to_lex(map.get(key).unwrap().clone()));
+// Implement From<Ipld> for Lex
+impl From<Ipld> for Lex {
+    fn from(val: Ipld) -> Self {
+        match val {
+            Ipld::List(list) => Lex::List(
+                list.into_iter()
+                    .map(Lex::from)
+                    .collect::<Vec<Lex>>(),
+            ),
+            Ipld::Map(map) => {
+                let mut to_return: BTreeMap<String, Lex> = BTreeMap::new();
+                for (key, value) in map {
+                    to_return.insert(key, Lex::from(value));
+                }
+                Lex::Map(to_return)
             }
-            Lex::Map(to_return)
+            Ipld::Json(blob)
+                if blob.get("$type") == Some(&JsonValue::String("blob".to_string()))
+                    || (matches!(blob.get("cid"), Some(&JsonValue::String(_)))
+                        && matches!(blob.get("mimeType"), Some(&JsonValue::String(_)))) =>
+            {
+                Lex::Blob(serde_json::from_value(blob).expect("Issue deserializing blob"))
+            }
+            _ => Lex::Ipld(val),
         }
-        Ipld::Json(blob)
-            if blob.get("$type") == Some(&JsonValue::String("blob".to_string()))
-                || (matches!(blob.get("cid"), Some(&JsonValue::String(_)))
-                    && matches!(blob.get("mimeType"), Some(&JsonValue::String(_)))) =>
-        {
-            Lex::Blob(serde_json::from_value(blob).expect("Issue deserializing blob"))
-        }
-        _ => Lex::Ipld(val),
     }
 }
 
+// Implement TryFrom<Vec<u8>> for Lex
+impl TryFrom<Vec<u8>> for Lex {
+    type Error = anyhow::Error;
+
+    fn try_from(val: Vec<u8>) -> Result<Self, Self::Error> {
+        let obj: Ipld = serde_ipld_dagcbor::from_slice(val.as_slice())?;
+        Ok(Lex::from(obj))
+    }
+}
+
+#[deprecated(
+    since = "0.0.1",
+    note = "Use `Ipld::from(lex)` instead"
+)]
+pub fn lex_to_ipld(val: Lex) -> Ipld {
+    Ipld::from(val)
+}
+
+#[deprecated(
+    since = "0.0.1",
+    note = "Use `Lex::from(ipld)` instead"
+)]
+pub fn ipld_to_lex(val: Ipld) -> Lex {
+    Lex::from(val)
+}
+
+#[deprecated(
+    since = "0.0.1",
+    note = "Use `Lex::try_from(vec)` instead"
+)]
 pub fn cbor_to_lex(val: Vec<u8>) -> Result<Lex> {
-    let obj: Ipld = serde_ipld_dagcbor::from_slice(val.as_slice())?; //cbordecode
-    Ok(ipld_to_lex(obj))
+    Lex::try_from(val)
 }
 
 pub fn cbor_to_lex_record(val: Vec<u8>) -> Result<RepoRecord> {
-    let parsed = cbor_to_lex(val)?;
+    let parsed = Lex::try_from(val)?;
     match parsed {
         Lex::Map(map) => Ok(map),
         _ => bail!("Lexicon record should be a json object"),
@@ -207,7 +243,6 @@ pub fn ensure_v3_commit(commit: VersionedCommit) -> Commit {
     }
 }
 
-/// Flattens a collection of byte vectors into a single vector
 pub fn flatten_u8_arrays(chunks: &[Vec<u8>]) -> Vec<u8> {
     let mut result = Vec::with_capacity(chunks.iter().map(|v| v.len()).sum());
     for chunk in chunks {
@@ -216,7 +251,6 @@ pub fn flatten_u8_arrays(chunks: &[Vec<u8>]) -> Vec<u8> {
     result
 }
 
-/// Collects a stream of byte chunks into a single buffer
 pub async fn stream_to_buffer<S>(mut stream: S) -> Result<Vec<u8>>
 where
     S: Stream<Item = Result<Vec<u8>>> + Unpin,
@@ -226,4 +260,80 @@ where
         buffer.extend_from_slice(&chunk?);
     }
     Ok(buffer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_lex_ipld_conversion() {
+        // Test simple map
+        let mut map = BTreeMap::new();
+        map.insert("key".to_string(), Lex::Ipld(Ipld::String("value".to_string())));
+        let lex = Lex::Map(map);
+        
+        let ipld = Ipld::from(lex.clone());
+        let lex_back = Lex::from(ipld);
+        
+        assert_eq!(lex, lex_back);
+
+        // Test list
+        let list = Lex::List(vec![
+            Lex::Ipld(Ipld::String(String::default())),
+            Lex::Ipld(Ipld::Bytes(vec![1,2,3])),
+        ]);
+        
+        let ipld = Ipld::from(list.clone());
+        let list_back = Lex::from(ipld);
+        
+        assert_eq!(list, list_back);
+
+        // Test blob
+        let blob_json = json!({
+            "$type": "blob",
+            "mimeType": "text/plain",
+            "data": "Hello, World!"
+        });
+        let blob = Lex::Blob(serde_json::from_value(blob_json.clone()).unwrap());
+        
+        let ipld = Ipld::from(blob.clone());
+        let blob_back = Lex::from(ipld);
+        
+        assert_eq!(blob, blob_back);
+    }
+
+    #[test]
+    fn test_cbor_conversion() -> Result<()> {
+        // Create test data
+        let mut map = BTreeMap::new();
+        map.insert("test".to_string(), Lex::Ipld(Ipld::String("value".to_string())));
+        let lex = Lex::Map(map);
+
+        // Convert to CBOR
+        let cbor = serde_ipld_dagcbor::to_vec(&Ipld::from(lex.clone()))?;
+
+        // Test TryFrom for Lex
+        let lex_from_cbor = Lex::try_from(cbor.clone())?;
+        assert_eq!(lex, lex_from_cbor);
+
+        // Test TryFrom for RepoRecord
+        let repo_record = cbor_to_lex_record(cbor)?;
+        assert_eq!(repo_record.get("test").unwrap(), &Lex::Ipld(Ipld::String("value".to_string())));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_cbor_conversion() {
+        // Test invalid CBOR data
+        let invalid_data = vec![0xFF, 0xFF, 0xFF];
+        assert!(Lex::try_from(invalid_data.clone()).is_err());
+        assert!(cbor_to_lex_record(invalid_data).is_err());
+
+        // Test valid CBOR but invalid format for RepoRecord
+        let list_cbor = serde_ipld_dagcbor::to_vec(&Ipld::List(vec![])).unwrap();
+        assert!(cbor_to_lex_record(invalid_data).is_err());
+    }
 }

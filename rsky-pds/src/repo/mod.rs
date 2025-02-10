@@ -21,7 +21,6 @@ use crate::repo::types::{
     PreparedCreateOrUpdate, PreparedDelete, PreparedWrite, RecordCreateOrUpdateOp, RecordWriteEnum,
     RecordWriteOp, RepoContents, RepoRecord, UnsignedCommit, WriteOpAction,
 };
-use crate::repo::util::{cbor_to_lex, lex_to_ipld};
 use crate::storage::readable_blockstore::ReadableBlockstore;
 use crate::storage::types::RepoStorage;
 use crate::storage::{sql_repo::SqlRepoReader, Ipld};
@@ -846,10 +845,10 @@ pub fn set_collection_name(
 }
 
 pub async fn cid_for_safe_record(record: RepoRecord) -> Result<Cid> {
-    let lex = lex_to_ipld(Lex::Map(record));
+    let lex: Ipld = Lex::Map(record).into();
     let block = serde_ipld_dagcbor::to_vec(&lex)?;
     // Confirm whether Block properly transforms between lex and cbor
-    let _ = cbor_to_lex(block)?;
+    let _= Lex::try_from(block)?;
     cid_for_cbor(&lex)
 }
 

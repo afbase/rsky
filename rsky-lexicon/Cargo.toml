@@ -27,4 +27,3 @@ thiserror = "1.0.40"
 secp256k1 = { version = "0.28.2", features = ["serde", "rand"] }
 libipld = "0.16.0"
 lexicon_cid = { package = "cid", version = "0.10.1", features = ["serde-codec"] }
-rsky-common-web = { path = "../rsky-common-web" }

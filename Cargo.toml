@@ -1,7 +1,6 @@
 [workspace]
 members = [ 
     "rsky-common",
-    "rsky-common-web",
     "rsky-crypto",
     "rsky-feedgen",
     "rsky-firehose",
@@ -21,7 +20,6 @@ rsky-identity = {path = "rsky-identity", version = "0.1.0"}
 rsky-crypto = {path = "rsky-crypto", version = "0.1.1"}
 rsky-syntax = {path = "rsky-syntax", version = "0.1.0"}
 rsky-common = {path = "rsky-common", version = "0.1.0"}
-rsky-common-web = {path = "rsky-common-web", version = "0.1.0"}
 
 [profile.release]
 debug = 2  # Or any level from 0 to 2
