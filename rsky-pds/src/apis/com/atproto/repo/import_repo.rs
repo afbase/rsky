@@ -7,24 +7,110 @@ use crate::repo::prepare::{
     prepare_create, prepare_delete, prepare_update, PrepareCreateOpts, PrepareDeleteOpts,
     PrepareUpdateOpts,
 };
+use anyhow::Result;
 use aws_config::SdkConfig;
 use futures::{stream, StreamExt};
 use lexicon_cid::Cid;
 use rocket::data::ToByteUnit;
+use rocket::data::{FromData, Outcome};
+use rocket::http::{ContentType, Status};
+use rocket::request::Request;
 use rocket::{Data, State};
 use rsky_common::env::env_int;
 use rsky_repo::block_map::BlockMap;
-use rsky_repo::car::read_stream_car_with_root;
+use rsky_repo::car::{read_stream_car_with_root, CarWithRoot};
 use rsky_repo::parse::get_and_parse_record;
 use rsky_repo::repo::Repo;
 use rsky_repo::sync::consumer::{verify_diff, VerifyRepoInput};
 use rsky_repo::types::{PreparedWrite, RecordWriteDescript, VerifiedDiff};
+use std::num::NonZeroU64;
+use std::ops::{Deref, DerefMut};
+
+const DEFAULT_IMPORT_LIMIT: usize = 100;
+
+#[derive(Debug)]
+pub enum CarError {
+    ContentLengthMissing,
+    ContentLengthInvalid,
+    ContentLengthTooLarge,
+    InvalidContentType,
+    ImportError(String),
+}
+
+// Wrapper struct that we can implement FromData for
+pub struct CarWithRootWrapper(pub CarWithRoot);
+
+// Implement Deref for ergonomic access to inner CarWithRoot
+impl Deref for CarWithRootWrapper {
+    type Target = CarWithRoot;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// Implement DerefMut for mutable access to inner CarWithRoot
+impl DerefMut for CarWithRootWrapper {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+// Implement FromData for our wrapper instead of directly for CarWithRoot
+#[rocket::async_trait]
+impl<'r> FromData<'r> for CarWithRootWrapper {
+    type Error = CarError;
+
+    async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> Outcome<'r, Self> {
+        // Check Content-Type
+        if let Some(content_type) = req.content_type() {
+            if content_type != &ContentType::new("application", "vnd.ipld.car") {
+                return Outcome::Error((
+                    Status::UnsupportedMediaType,
+                    CarError::InvalidContentType,
+                ));
+            }
+        }
+
+        // Get and validate Content-Length
+        let content_length = match req.headers().get_one("content-length") {
+            None => {
+                return Outcome::Error((Status::LengthRequired, CarError::ContentLengthMissing));
+            }
+            Some(len) => match len.parse::<NonZeroU64>() {
+                Ok(len) => len.get(),
+                Err(_) => {
+                    return Outcome::Error((Status::BadRequest, CarError::ContentLengthInvalid));
+                }
+            },
+        };
+
+        // Get import size limit from env or use default
+        let import_limit = env_int("IMPORT_REPO_LIMIT")
+            .unwrap_or(DEFAULT_IMPORT_LIMIT)
+            .megabytes();
+
+        // Validate against size limit
+        if content_length > import_limit.as_u64() {
+            return Outcome::Error((Status::PayloadTooLarge, CarError::ContentLengthTooLarge));
+        }
+
+        // Limit the data stream to the exact content length
+        let limited_stream = data.open(content_length.bytes());
+
+        // Parse the CAR file
+        match read_stream_car_with_root(limited_stream).await {
+            Ok(car) => Outcome::Success(CarWithRootWrapper(car)),
+            Err(e) => Outcome::Error((Status::BadRequest, CarError::ImportError(e.to_string()))),
+        }
+    }
+}
 
 #[tracing::instrument(skip_all)]
-#[rocket::post("/xrpc/com.atproto.repo.importRepo", data = "<blob>")]
+#[rocket::post("/xrpc/com.atproto.repo.importRepo", data = "<car_with_root>")]
 pub async fn import_repo(
     auth: AccessFullImport,
-    blob: Data<'_>,
+    mut car_with_root: CarWithRootWrapper,
     s3_config: &State<SdkConfig>,
     db: DbConn,
 ) -> Result<(), ApiError> {
@@ -42,26 +128,16 @@ pub async fn import_repo(
         Some(_root) => Some(Repo::load(actor_store.storage.clone(), curr_root).await?),
     };
 
-    // Process imported car
-    let max_import_size = env_int("IMPORT_REPO_LIMIT").unwrap_or(100).megabytes();
-    let import_datastream = blob.open(max_import_size);
-    let car_with_root = match read_stream_car_with_root(import_datastream).await {
-        Ok(res) => res,
-        Err(error) => {
-            return Err(ApiError::InvalidRequest(error.to_string()));
-        }
-    };
-
     // Get verified difference from current repo and imported repo
-    let mut imported_blocks: BlockMap = car_with_root.blocks;
     let imported_root: Cid = car_with_root.root;
+    let imported_blocks = &mut car_with_root.blocks;
     let opts = VerifyRepoInput {
         ensure_leaves: Some(false),
     };
 
     let diff: VerifiedDiff = match verify_diff(
         curr_repo,
-        &mut imported_blocks,
+        imported_blocks,
         imported_root,
         None,
         None,
