@@ -1,7 +1,7 @@
-mod event;
+pub mod event;
 mod manager;
 mod resolver;
-mod types;
+pub mod types;
 mod utils;
 
 pub use manager::{Manager, ManagerError};

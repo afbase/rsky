@@ -39,7 +39,7 @@ mod crawler;
 mod publisher;
 mod server;
 mod types;
-mod validator;
+pub mod validator;
 
 use std::sync::atomic::AtomicBool;
 

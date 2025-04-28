@@ -1,0 +1,68 @@
+[package]
+name = "rsky-relay-fuzz"
+version = "0.0.1"
+publish = false
+edition = "2021"
+path = "src/lib.rs"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+arbitrary = { version = "1", features = ["derive"] }
+rsky-relay = { path = "../../rsky-relay" } #, features = ["fuzzing"]}
+cid = { version = "0.10", features = ["serde-codec"] }
+multihash = "0.18"
+serde_ipld_dagcbor = "0.6"
+ipld-core = "0.4"
+base32 = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dependencies.rsky-common]
+path = "../../rsky-common"
+
+# # Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+
+# [[bin]]
+# name = "mst_operations"
+# path = "fuzz_targets/mst_operations.rs"
+# test = false
+# doc = false
+# bench = false
+
+# [[bin]]
+# name = "mst_complex"
+# path = "fuzz_targets/mst_complex.rs"
+# test = false
+# doc = false
+# bench = false
+
+# [[bin]]
+# name = "mst_structured_operations"
+# path = "fuzz_targets/mst_structured_operations.rs"
+# test = false
+# doc = false
+# bench = false
+
+# [[bin]]
+# name = "mst_common_prefix"
+# path = "fuzz_targets/mst_common_prefix.rs"
+# test = false
+# doc = false
+
+# [[bin]]
+# name = "mst_key_heights"
+# path = "fuzz_targets/mst_key_heights.rs"
+# test = false
+# doc = false
+
+[[bin]]
+name = "mst_example_keys"
+path = "fuzz_targets/mst_example_keys.rs"
+test = false
+doc = false

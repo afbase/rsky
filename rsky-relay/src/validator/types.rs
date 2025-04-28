@@ -286,7 +286,7 @@ impl Node {
     //
     // If the insert is a no-op (the key already existed with exact value), then the operation
     // is a no-op, the tree is not marked dirty, and the val is returned as the 'prev' value.
-    fn insert(&mut self, path: &str, val: Cid, mut height: i8) -> Result<Option<Cid>, InvertError> {
+    pub fn insert(&mut self, path: &str, val: Cid, mut height: i8) -> Result<Option<Cid>, InvertError> {
         if self.stub {
             return Err(InvertError::PartialTree);
         }
@@ -402,7 +402,7 @@ impl Node {
         Ok(None)
     }
 
-    fn split(mut self, path: &str) -> Result<(Self, Self), InvertError> {
+    pub fn split(mut self, path: &str) -> Result<(Self, Self), InvertError> {
         if self.entries.is_empty() {
             // TODO: this feels defensive and could be removed
             return Err(InvertError::EmptySplit);
@@ -445,7 +445,7 @@ impl Node {
 
     // Removes key/value from the sub-tree provided, returning a new tree, and the previous CID value.
     // If key is not found, returns unmodified subtree, and nil for the returned CID.
-    fn remove(&mut self, path: &str, mut height: i8) -> Result<Option<Cid>, InvertError> {
+    pub fn remove(&mut self, path: &str, mut height: i8) -> Result<Option<Cid>, InvertError> {
         if self.stub {
             return Err(InvertError::PartialTree);
         }
@@ -557,7 +557,7 @@ impl Node {
         Ok(Some(prev))
     }
 
-    fn merge(&mut self, other: Self) -> Result<(), InvertError> {
+    pub fn merge(&mut self, other: Self) -> Result<(), InvertError> {
         let idx = self.entries.len();
         *self = Self {
             entries: mem::take(&mut self.entries),
@@ -731,7 +731,7 @@ impl Node {
     }
 
     // Looks for a "value" entry in the node with the exact key.
-    fn find_value(&self, path: &str) -> Option<usize> {
+    pub fn find_value(&self, path: &str) -> Option<usize> {
         for (i, entry) in self.entries.iter().enumerate() {
             match entry {
                 // TODO: could skip early if e.Key is lower
