@@ -1,0 +1,50 @@
+name: pds-localhost-deploy
+version: '3.8'
+services:
+  postgres:
+    image: postgres:17-bookworm
+    container_name: rsky-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5678:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  rsky-pds:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rsky-pds
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - 8000:8000
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
+      - AWS_ENDPOINT="nyc3.digitaloceanspaces.com"
+      - PDS_ADMIN_PASS=password
+      - PDS_HOST=0.0.0.0
+      - PDS_PORT=8000
+      - PORT=8000
+      - PDS_SERVICE_HANDLE_DOMAINS="test"
+      - PDS_SERVICE_DID=did:web:rsky-pds
+      - AWS_EC2_METADATA_DISABLED=true
+      - LOG_LEVEL=debug
+      - RUST_BACKTRACE=1
+      - RSKY_PDS_CONTAINER=true
+    volumes:
+      - rsky_data:/data
+    restart: unless-stopped
+volumes:
+  postgres_data:
+    name: rsky-postgres-data
+  rsky_data:
+    name: rsky-data
