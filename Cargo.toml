@@ -1,6 +1,8 @@
 [workspace]
-members = [ "rsky-common", "rsky-crypto","rsky-feedgen", "rsky-firehose", "rsky-identity", "rsky-labeler", "rsky-lexicon", "rsky-pds", "rsky-syntax", "rsky-jetstream-subscriber", "rsky-repo", "cypher/backend", "cypher/frontend", "rsky-satnav", "rsky-relay"]
+members = [ "rsky-pdsadmin", "rsky-common", "rsky-crypto","rsky-feedgen", "rsky-firehose", "rsky-identity", "rsky-labeler", "rsky-lexicon", "rsky-pds", "rsky-syntax", "rsky-jetstream-subscriber", "rsky-repo", "cypher/backend", "cypher/frontend", "rsky-satnav"]
+# Temporarily removed "rsky-relay" due to libsqlite3-sys dependency conflict
 resolver = "2"
+
 
 [workspace.dependencies]
 cargo = { version = "0.84.0",features = ["vendored-openssl"] }
@@ -24,6 +26,26 @@ rsky-syntax = {path = "rsky-syntax", version = "0.1.0"}
 rsky-common = {path = "rsky-common", version = "0.1.1"}
 rsky-repo = {path = "rsky-repo", version = "0.0.1"}
 rsky-firehose = {path = "rsky-firehose", version = "0.2.0"}
+
+# Dependencies for rsky-pdsadmin and other projects
+anyhow = "1.0.75"
+clap = { version = "4.4.6", features = ["derive", "env"] }
+reqwest = { version = "0.11.23", features = ["json", "blocking"] }
+dotenv = "0.15.0"
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
+diesel = { version = "2.2.10", features = ["postgres", "sqlite"] }
+diesel_cli = { version = "2.2.10", features = ["postgres"] }
+diesel_migrations = { version = "2.1.0", features = ["postgres"] }
+chrono = "0.4"
+dirs = "5.0"
+base64 = "0.21.4"
+which = "4.4.0"
+thiserror = "1.0.49"
+dialoguer = "0.10.4"
+indicatif = "0.17.7"
+shellexpand = "3.1.0"
+mockito = "1.2.0"
+tempfile = "3.8.0"
 
 [profile.release]
 debug = 2  # Or any level from 0 to 2

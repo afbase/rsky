@@ -3,6 +3,8 @@ name = "rsky-relay"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+
 [dependencies]
 # external
 bytes = "1"
@@ -47,8 +49,8 @@ urlencoding = "2"
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # internal
-rsky-common = { workspace = true }
-rsky-identity = { workspace = true }
+rsky-common = { path = "../rsky-common" }
+rsky-identity = { path = "../rsky-identity" }
 
 [package.metadata.cargo-machete]
 ignored = ["serde_bytes"]
