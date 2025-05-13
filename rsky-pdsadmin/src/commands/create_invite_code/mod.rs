@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::{Value, json};
 use std::env;
 
-use crate::util::{env as env_util, http_client};
 use crate::commands::is_verbose;
+use crate::util::{env as env_util, http_client};
 
 /// Execute the create-invite-code command
 pub fn execute() -> Result<()> {
@@ -12,7 +12,9 @@ pub fn execute() -> Result<()> {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Error loading environment variables: {}", e);
-            eprintln!("Please ensure pds.env exists with required variables (PDS_ADMIN_PASSWORD, PDS_HOSTNAME)");
+            eprintln!(
+                "Please ensure pds.env exists with required variables (PDS_ADMIN_PASSWORD, PDS_HOSTNAME)"
+            );
             return Err(anyhow::anyhow!("Failed to load environment variables"));
         }
     };
@@ -37,8 +39,10 @@ pub fn execute() -> Result<()> {
     // Display verbose debugging information if enabled
     if is_verbose() {
         println!("[DEBUG] Preparing to create invite code");
-        println!("[DEBUG] Using PDS hostname: {}",
-            env::var("PDS_HOSTNAME").unwrap_or_else(|_| "unknown host".to_string()));
+        println!(
+            "[DEBUG] Using PDS hostname: {}",
+            env::var("PDS_HOSTNAME").unwrap_or_else(|_| "unknown host".to_string())
+        );
         println!("[DEBUG] Using endpoint: com.atproto.server.createInviteCode");
     }
 
@@ -54,11 +58,13 @@ pub fn execute() -> Result<()> {
                 println!("[DEBUG] Successfully received response from server");
             }
             result
-        },
+        }
         Err(e) => {
             eprintln!("ERROR: Failed to create invite code: {}", e);
-            eprintln!("Please check that the PDS server is running and accessible at {}",
-                env::var("PDS_HOSTNAME").unwrap_or_else(|_| "unknown host".to_string()));
+            eprintln!(
+                "Please check that the PDS server is running and accessible at {}",
+                env::var("PDS_HOSTNAME").unwrap_or_else(|_| "unknown host".to_string())
+            );
             return Err(anyhow::anyhow!("Failed to create invite code: {}", e));
         }
     };

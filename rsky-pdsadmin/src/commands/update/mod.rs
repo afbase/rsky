@@ -92,7 +92,7 @@ pub fn execute(_target_version: &str) -> Result<()> {
     println!("---------------------");
     println!("Check logs to ensure the service started correctly");
     println!("Check container logs: docker logs rsky-pds");
-    println!("");
+    println!();
 
     Ok(())
 }

@@ -4,8 +4,10 @@ pub mod request_crawl;
 pub mod rsky_pds;
 pub mod update;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand};
+use std::process::Command;
+use which::which;
 
 /// RSKY PDS Administration CLI
 #[derive(Parser, Debug)]
@@ -54,7 +56,12 @@ pub enum Commands {
     },
 
     /// Display help information
+    #[command(name = "show-help")]
     Help,
+
+    /// External command that will be handled dynamically
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 /// Set whether verbose logging is enabled
@@ -63,6 +70,54 @@ pub static mut VERBOSE_LOGGING: bool = false;
 /// Check if verbose logging is enabled
 pub fn is_verbose() -> bool {
     unsafe { VERBOSE_LOGGING }
+}
+
+/// Check if an external command exists in PATH
+fn external_command_exists(command: &str) -> bool {
+    which(format!("rsky-pdsadmin-{}", command)).is_ok()
+}
+
+/// Execute an external command
+fn execute_external_command(command: &str, args: &[String]) -> Result<()> {
+    let command_name = format!("rsky-pdsadmin-{}", command);
+
+    // Find the command in PATH
+    let command_path = which(&command_name)
+        .with_context(|| format!("External command '{}' not found in PATH", command_name))?;
+
+    if cfg!(target_family = "unix") {
+        // On Unix-like systems, execute directly
+        let status = Command::new(command_path)
+            .args(args)
+            .status()
+            .with_context(|| format!("Failed to execute external command '{}'", command_name))?;
+
+        if !status.success() {
+            let exit_code = status.code().unwrap_or(-1);
+            return Err(anyhow!(
+                "External command '{}' failed with exit code {}",
+                command_name,
+                exit_code
+            ));
+        }
+    } else {
+        // On Windows, we might need additional handling
+        let status = Command::new(command_path)
+            .args(args)
+            .status()
+            .with_context(|| format!("Failed to execute external command '{}'", command_name))?;
+
+        if !status.success() {
+            let exit_code = status.code().unwrap_or(-1);
+            return Err(anyhow!(
+                "External command '{}' failed with exit code {}",
+                command_name,
+                exit_code
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Execute the CLI command
@@ -98,6 +153,25 @@ pub fn execute() -> Result<()> {
         Commands::Help => {
             print_help();
             Ok(())
+        }
+        Commands::External(args) => {
+            if args.is_empty() {
+                return Err(anyhow!("No external command specified"));
+            }
+
+            let command = &args[0];
+            let command_args = &args[1..];
+
+            if external_command_exists(command) {
+                execute_external_command(command, command_args)
+                    .with_context(|| format!("Failed to execute external command '{}'", command))
+            } else {
+                Err(anyhow!(
+                    "Unknown command: {}. External command 'rsky-pdsadmin-{}' not found in PATH",
+                    command,
+                    command
+                ))
+            }
         }
     }
 }
@@ -143,6 +217,11 @@ fn print_help() {
     println!("    Initialize the database with the required schema.");
     println!("    e.g. pdsadmin rsky-pds init-db");
     println!();
-    println!("help");
+    println!("show-help");
     println!("    Display this help information.");
+    println!();
+    println!("External Commands");
+    println!("    Any executable named 'rsky-pdsadmin-<command>' in your PATH");
+    println!("    will be available as 'pdsadmin <command>'.");
+    println!("    e.g. If 'rsky-pdsadmin-hello' exists in PATH, run it with 'pdsadmin hello'");
 }

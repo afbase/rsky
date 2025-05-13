@@ -102,14 +102,18 @@ fn list_accounts() -> Result<()> {
             eprintln!("ERROR: Failed to connect to PDS server at {}", pds_hostname);
             eprintln!("Reason: {}", e);
             eprintln!("Please check that the PDS server is running and accessible");
-            return Err(anyhow::anyhow!("Failed to send request to list repositories"));
+            return Err(anyhow::anyhow!(
+                "Failed to send request to list repositories"
+            ));
         }
     };
 
     // Check server response status
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().unwrap_or_else(|_| "Unable to read error response".to_string());
+        let error_text = response
+            .text()
+            .unwrap_or_else(|_| "Unable to read error response".to_string());
         eprintln!("ERROR: Server returned error status {}", status);
         eprintln!("Response: {}", error_text);
         return Err(anyhow::anyhow!("Server returned error status {}", status));
@@ -168,10 +172,13 @@ fn list_accounts() -> Result<()> {
     for did in dids {
         println!("Fetching account info for {}", did);
 
-        match http_client::admin_get::<Value>(&format!("com.atproto.admin.getAccountInfo?did={}", did)) {
+        match http_client::admin_get::<Value>(&format!(
+            "com.atproto.admin.getAccountInfo?did={}",
+            did
+        )) {
             Ok(account_info) => {
                 results.push(account_info);
-            },
+            }
             Err(e) => {
                 eprintln!("WARNING: Failed to get account info for {}: {}", did, e);
                 // Continue with other DIDs rather than failing completely

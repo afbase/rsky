@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
 use reqwest::{blocking, header};
 use serde::{Serialize, de::DeserializeOwned};
-use serde_json::json;
 
-use crate::util::env::get_env_var;
 use crate::commands::is_verbose;
+use crate::util::env::get_env_var;
 
 /// Create a new HTTP client with admin authentication
 pub fn create_admin_client() -> Result<blocking::Client> {
@@ -19,8 +18,10 @@ pub fn create_admin_client() -> Result<blocking::Client> {
 
     let mut auth_value = header::HeaderValue::from_str(&format!(
         "Basic {}",
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD,
-                              format!("admin:{}", pds_admin_password))
+        base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            format!("admin:{}", pds_admin_password)
+        )
     ))?;
     auth_value.set_sensitive(true);
     headers.insert(header::AUTHORIZATION, auth_value);
@@ -51,7 +52,8 @@ pub fn create_client() -> Result<blocking::Client> {
 
 /// Get the PDS hostname from environment variables
 pub fn get_pds_hostname() -> Result<String> {
-    get_env_var("PDS_HOSTNAME").context("PDS_HOSTNAME environment variable not set. Please set it in your pds.env file")
+    get_env_var("PDS_HOSTNAME")
+        .context("PDS_HOSTNAME environment variable not set. Please set it in your pds.env file")
 }
 
 /// Get the PDS hostname from environment variables
@@ -88,7 +90,9 @@ pub fn admin_get<T: DeserializeOwned>(endpoint: &str) -> Result<T> {
 
     if !response.status().is_success() {
         let status = response.status();
-        let err_text = response.text().unwrap_or_else(|_| "Could not read error response".to_string());
+        let err_text = response
+            .text()
+            .unwrap_or_else(|_| "Could not read error response".to_string());
 
         return Err(anyhow::anyhow!(
             "Server returned error status {}: {}",
@@ -97,9 +101,10 @@ pub fn admin_get<T: DeserializeOwned>(endpoint: &str) -> Result<T> {
         ));
     }
 
-    response
-        .json()
-        .context(format!("Failed to parse response from {} as JSON", endpoint))
+    response.json().context(format!(
+        "Failed to parse response from {} as JSON",
+        endpoint
+    ))
 }
 
 /// Make a POST request to the PDS with admin authentication
@@ -136,7 +141,9 @@ pub fn admin_post<T: DeserializeOwned, D: Serialize>(endpoint: &str, data: D) ->
 
     if !response.status().is_success() {
         let status = response.status();
-        let err_text = response.text().unwrap_or_else(|_| "Could not read error response".to_string());
+        let err_text = response
+            .text()
+            .unwrap_or_else(|_| "Could not read error response".to_string());
 
         return Err(anyhow::anyhow!(
             "Server returned error status {}: {}",
@@ -145,9 +152,10 @@ pub fn admin_post<T: DeserializeOwned, D: Serialize>(endpoint: &str, data: D) ->
         ));
     }
 
-    response
-        .json()
-        .context(format!("Failed to parse response from {} as JSON", endpoint))
+    response.json().context(format!(
+        "Failed to parse response from {} as JSON",
+        endpoint
+    ))
 }
 
 /// Make a POST request to the PDS without requiring success
