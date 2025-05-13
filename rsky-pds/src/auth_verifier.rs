@@ -638,12 +638,20 @@ impl<'r> FromRequest<'r> for AdminToken {
             )),
             Some(parsed) => {
                 let BasicAuth { username, password } = parsed;
+                let admin = "admin".to_string();
+                // Keep your debug logs
+                tracing::info!("Debug - username: '{}', admin: '{}'", username, admin);
+                tracing::info!("Debug - username bytes: {:?}, admin bytes: {:?}", 
+                            username.as_bytes(), admin.as_bytes());
 
-                if username != "admin" || password != env::var("PDS_ADMIN_PASS").unwrap() {
-                    let error = AuthError::AuthRequired("BadAuth".to_string());
-                    req.local_cache(|| Some(ApiError::InvalidRequest(error.to_string())));
-                    Outcome::Error((Status::BadRequest, error))
-                } else {
+                // Check both conditions separately
+                let username_matches = username == "admin";
+                let password_matches = password == env::var("PDS_ADMIN_PASS").unwrap();
+
+                tracing::info!("Username matches: {}", username_matches);
+                tracing::info!("Password matches: {}", password_matches);
+
+                if username_matches && password_matches {
                     Outcome::Success(AdminToken {
                         access: AccessOutput {
                             credentials: Some(Credentials {
@@ -659,6 +667,16 @@ impl<'r> FromRequest<'r> for AdminToken {
                             artifacts: None,
                         },
                     })
+                } else {
+                    tracing::info!("PDS_ADMIN_PASS: {}", env::var("PDS_ADMIN_PASS").unwrap());
+                    tracing::info!("username: {}", username);
+                    tracing::info!("username:{}:username:admin:username", username);
+                    tracing::info!("username match? {}", username == "admin" );
+                    tracing::info!("password: {}", password);
+                    tracing::info!("password match? {:?}", password == env::var("PDS_ADMIN_PASS").unwrap());
+                    let error = AuthError::AuthRequired("BadAuth".to_string());
+                    req.local_cache(|| Some(ApiError::InvalidRequest(error.to_string())));
+                    Outcome::Error((Status::BadRequest, error))
                 }
             }
         }

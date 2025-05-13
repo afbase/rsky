@@ -7,7 +7,8 @@ WORKDIR /usr/src/rsky
 COPY . .
 
 # Install production dependencies and build a release artifact.
-RUN cargo build --package rsky-pds
+RUN rustup toolchain install nightly-2025-01-03-aarch64-unknown-linux-gnu && \
+    cargo build --package rsky-pds
 
 # Run the web service on container startup.
 CMD ["sh", "-c", "ROCKET_PORT=$PORT ROCKET_ADDRESS=0.0.0.0 cargo run --package rsky-pds"]
